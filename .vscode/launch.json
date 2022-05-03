@@ -1,0 +1,68 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "(encrypt) Launch",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/sgxCryptoFile",
+            "args": [
+                "-e",
+                "-i",
+                "README.md",
+                "-o",
+                "README.md.encrypted"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "miDebuggerPath": "/opt/intel/sgxsdk/bin/sgx-gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "(decrypt) Launch",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/sgxCryptoFile",
+            "args": [
+                "-e",
+                "-i",
+                "README.md.encrypted",
+                "-o",
+                "README.md.decrypted"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "miDebuggerPath": "/opt/intel/sgxsdk/bin/sgx-gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ]
+        }
+    ]
+}

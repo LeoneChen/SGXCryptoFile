@@ -64,6 +64,7 @@ int encryptFile(sgx_enclave_id_t eid, const char* input, const char* output)
 
     printf("[APP ENCRYPT] Encryption file (%s) created!\n",output);
     printf("[APP ENCRYPT] Final encryption time: %6.6f seconds.\n", secs);
+    return 0;
 }
 
 int decryptFile(sgx_enclave_id_t eid, const char* input, const char* output)
@@ -111,6 +112,7 @@ int decryptFile(sgx_enclave_id_t eid, const char* input, const char* output)
 
     printf("[APP DECRYPT] Decryption file (%s) created!\n",output);
     printf("[APP DECRYPT] Final decryption time: %6.6f seconds.\n", secs);
+    return 0;
 }
 
 void printDebug(const char *buf)

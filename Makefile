@@ -1,6 +1,13 @@
 SGX_SDK ?= /opt/intel/sgxsdk
-SGX_MODE ?= SIM
+SGX_MODE ?= HW
 SGX_ARCH ?= x64
+SGX_DEBUG ?= 1
+
+# I use llvm pass to instrument enclave src
+CXX = clang++
+CC = clang
+# Customized. Set by user.
+SGXSanPath := $(abspath ../../linux-sgx/SGXSan)
 
 ifeq ($(shell getconf LONG_BIT), 32)
 	SGX_ARCH := x86
@@ -60,7 +67,7 @@ else
 endif
 
 App_Cpp_Flags := $(App_C_Flags) -std=c++11
-App_Link_Flags := $(SGX_COMMON_CFLAGS) -L$(SGX_LIBRARY_PATH) -l$(Urts_Library_Name) -lpthread 
+App_Link_Flags := $(SGX_COMMON_CFLAGS) -L$(SGX_LIBRARY_PATH) -L$(SGXSanPath)/output -l$(Urts_Library_Name) -lSGXSanRTApp -Wl,-rpath=$(SGXSanPath)/output -lpthread
 
 ifneq ($(SGX_MODE), HW)
 	App_Link_Flags += -lsgx_uae_service_sim
@@ -86,15 +93,18 @@ Crypto_Library_Name := sgx_tcrypto
 CryptoEnclave_Cpp_Files := CryptoEnclave/CryptoEnclave.cpp
 CryptoEnclave_Include_Paths := -IInclude -ICryptoEnclave -I$(SGX_SDK)/include -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/stlport
 
-CryptoEnclave_C_Flags := $(SGX_COMMON_CFLAGS) -nostdinc -fvisibility=hidden -fpie -fstack-protector $(CryptoEnclave_Include_Paths)
+CryptoEnclave_C_Flags := $(SGX_COMMON_CFLAGS) -nostdinc -fvisibility=hidden -fpie -fstack-protector $(CryptoEnclave_Include_Paths) -Xclang -load -Xclang $(SGXSanPath)/output/libSymbolSaverForLTOPass.so -flto
 CryptoEnclave_Cpp_Flags := $(CryptoEnclave_C_Flags) -std=c++03 -nostdinc++
-CryptoEnclave_Link_Flags := $(SGX_COMMON_CFLAGS) -Wl,--no-undefined -nostdlib -nodefaultlibs -nostartfiles -L$(SGX_LIBRARY_PATH) \
-	-Wl,--whole-archive -l$(Trts_Library_Name) -Wl,--no-whole-archive \
-	-Wl,--start-group -lsgx_tstdc -lsgx_tstdcxx -l$(Crypto_Library_Name) -l$(Service_Library_Name) -Wl,--end-group \
+CryptoEnclave_Link_Flags := $(SGX_COMMON_CFLAGS) -Wl,--no-undefined -nostdlib -nodefaultlibs -nostartfiles -L$(SGXSanPath)/output -L$(SGX_LIBRARY_PATH) \
+	-Wl,--whole-archive -lSGXSanRTEnclave -l$(Trts_Library_Name) -Wl,--no-whole-archive \
+	-Wl,--start-group -lsgx_tstdc -lsgx_tcxx -lsgx_pthread -l$(Crypto_Library_Name) -l$(Service_Library_Name) -Wl,--end-group \
 	-Wl,-Bstatic -Wl,-Bsymbolic -Wl,--no-undefined \
 	-Wl,-pie,-eenclave_entry -Wl,--export-dynamic  \
 	-Wl,--defsym,__ImageBase=0 \
-	-Wl,--version-script=CryptoEnclave/CryptoEnclave.lds
+	-Wl,--version-script=CryptoEnclave/CryptoEnclave.lds \
+	-fuse-ld=lld \
+	-Wl,-mllvm=-load=$(SGXSanPath)/output/libSensitiveLeakSanPass.so \
+	-Wl,-mllvm=-load=$(SGXSanPath)/output/libSGXSanPass.so
 
 CryptoEnclave_Cpp_Objects := $(CryptoEnclave_Cpp_Files:.cpp=.o)
 
@@ -134,7 +144,7 @@ endif
 ######## CryptoFileApp Objects ########
 
 CryptoFileApp/CryptoEnclave_u.c: $(SGX_EDGER8R) CryptoEnclave/CryptoEnclave.edl
-	@cd CryptoFileApp && $(SGX_EDGER8R) --untrusted ../CryptoEnclave/CryptoEnclave.edl --search-path ../CryptoEnclave --search-path $(SGX_SDK)/include
+	@cd CryptoFileApp && $(SGX_EDGER8R) --untrusted ../CryptoEnclave/CryptoEnclave.edl --search-path ../CryptoEnclave --search-path $(SGX_SDK)/include --search-path $(SGXSanPath)/output
 	@echo "GEN  =>  $@"
 
 CryptoFileApp/CryptoEnclave_u.o: CryptoFileApp/CryptoEnclave_u.c
@@ -161,14 +171,16 @@ $(App_Name): CryptoFileApp/Benchmark/cpuidc64.o CryptoFileApp/Benchmark/cpuida64
 ######## CryptoEnclave Objects ########
 
 CryptoEnclave/CryptoEnclave_t.c: $(SGX_EDGER8R) CryptoEnclave/CryptoEnclave.edl
-	@cd CryptoEnclave && $(SGX_EDGER8R) --trusted ../CryptoEnclave/CryptoEnclave.edl --search-path ../CryptoEnclave --search-path $(SGX_SDK)/include
+	@cd CryptoEnclave && $(SGX_EDGER8R) --trusted ../CryptoEnclave/CryptoEnclave.edl --search-path ../CryptoEnclave --search-path $(SGX_SDK)/include --search-path $(SGXSanPath)/output
 	@echo "GEN  =>  $@"
+
+CryptoEnclave/CryptoEnclave_t.h: CryptoEnclave/CryptoEnclave_t.c
 
 CryptoEnclave/CryptoEnclave_t.o: CryptoEnclave/CryptoEnclave_t.c
 	@$(CC) $(CryptoEnclave_C_Flags) -c $< -o $@
 	@echo "CC   <=  $<"
 
-CryptoEnclave/%.o: CryptoEnclave/%.cpp
+CryptoEnclave/%.o: CryptoEnclave/%.cpp CryptoEnclave/CryptoEnclave_t.h
 	@$(CXX) $(CryptoEnclave_Cpp_Flags) -c $< -o $@
 	@echo "CXX  <=  $<"
 
@@ -178,9 +190,11 @@ $(CryptoEnclave_Name): CryptoEnclave/CryptoEnclave_t.o $(CryptoEnclave_Cpp_Objec
 
 $(Signed_CryptoEnclave_Name): $(CryptoEnclave_Name)
 	@$(SGX_ENCLAVE_SIGNER) sign -key CryptoEnclave/CryptoEnclave_private.pem -enclave $(CryptoEnclave_Name) -out $@ -config $(CryptoEnclave_Config_File)
+	@ln -s $(Signed_CryptoEnclave_Name) enclave.signed.so
 	@echo "SIGN =>  $@"
 
 .PHONY: clean
 
 clean:
 	@rm -f $(App_Name) $(CryptoEnclave_Name) $(Signed_CryptoEnclave_Name) $(App_Cpp_Objects) CryptoFileApp/Benchmark/*.o CryptoFileApp/CryptoEnclave_u.* $(CryptoEnclave_Cpp_Objects) CryptoEnclave/CryptoEnclave_t.*
+	@rm -f enclave.signed.so
