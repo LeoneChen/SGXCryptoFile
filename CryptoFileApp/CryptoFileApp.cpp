@@ -48,7 +48,7 @@ int encryptFile(sgx_enclave_id_t eid, const char* input, const char* output)
 
     start_time();
 
-    sgxEncryptFile(eid, message, fsize, encMessage, encMessageLen);
+    sgxEncryptFile(eid, message, fsize, /* encMessage */ nullptr, encMessageLen);
 
     end_time();
 
