@@ -3,3 +3,9 @@
 **/*.o
 sgxCryptoFile
 **/*.so
+*_u.c
+*_u.h
+Enclave.edl.json
+workdir*
+*.cpio.gz
+InstrumentStatistics.json
