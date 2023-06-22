@@ -180,7 +180,7 @@ CryptoFileApp/CryptoEnclave_u.c: $(SGX_EDGER8R) CryptoEnclave/CryptoEnclave.edl
 	@cd CryptoFileApp && $(SGX_EDGER8R) --untrusted ../CryptoEnclave/CryptoEnclave.edl --search-path ../CryptoEnclave --search-path $(SGX_SDK)/include --dump-parse ../Enclave.edl.json
 	@echo "GEN  =>  $@"
 
-CryptoFileApp/CryptoEnclave_u.o: CryptoFileApp/CryptoEnclave_u.c
+CryptoFileApp/CryptoEnclave_u.o: CryptoFileApp/CryptoEnclave_u.c $(CryptoEnclave_Name)
 	@$(CC) $(App_C_Flags) -c $< -o $@ \
 	-flegacy-pass-manager \
 	-Xclang -load -Xclang $(SGX_SDK)/lib64/libSGXFuzzerPass.so
@@ -229,3 +229,4 @@ $(Signed_CryptoEnclave_Name): $(CryptoEnclave_Name)
 
 clean:
 	@rm -f $(App_Name) $(CryptoEnclave_Name) $(Signed_CryptoEnclave_Name) $(App_Cpp_Objects) CryptoFileApp/Benchmark/*.o CryptoFileApp/CryptoEnclave_u.* $(CryptoEnclave_Cpp_Objects) CryptoEnclave/CryptoEnclave_t.*
+	@rm -f InstrumentStatistics.json
