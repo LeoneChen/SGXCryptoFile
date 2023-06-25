@@ -132,7 +132,7 @@ void printAppUsage()
     printf("Example (Decryption): sgxCryptoFile -d -i [INPUT_FILE] -o [OUTPUT_FILE]\n\n");
 }
 
-int main(int argc, char *argv[])
+int __hidden_main(int argc, char *argv[])
 {
     int option = 0;
     int mode = 0;

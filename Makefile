@@ -86,15 +86,14 @@ Crypto_Library_Name := sgx_tcrypto
 CryptoEnclave_Cpp_Files := CryptoEnclave/CryptoEnclave.cpp
 CryptoEnclave_Include_Paths := -IInclude -ICryptoEnclave -I$(SGX_SDK)/include -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/stlport
 
-CryptoEnclave_C_Flags := $(SGX_COMMON_CFLAGS) -nostdinc -fvisibility=hidden -fpie -fstack-protector $(CryptoEnclave_Include_Paths)
-CryptoEnclave_Cpp_Flags := $(CryptoEnclave_C_Flags) -std=c++03 -nostdinc++
-CryptoEnclave_Link_Flags := $(SGX_COMMON_CFLAGS) -Wl,--no-undefined -nostdlib -nodefaultlibs -nostartfiles -L$(SGX_LIBRARY_PATH) \
-	-Wl,--whole-archive -l$(Trts_Library_Name) -Wl,--no-whole-archive \
-	-Wl,--start-group -lsgx_tstdc -lsgx_tstdcxx -l$(Crypto_Library_Name) -l$(Service_Library_Name) -Wl,--end-group \
-	-Wl,-Bstatic -Wl,-Bsymbolic -Wl,--no-undefined \
-	-Wl,-pie,-eenclave_entry -Wl,--export-dynamic  \
-	-Wl,--defsym,__ImageBase=0 \
-	-Wl,--version-script=CryptoEnclave/CryptoEnclave.lds
+CryptoEnclave_C_Flags := $(SGX_COMMON_CFLAGS) -fvisibility=hidden -fpie -fstack-protector $(CryptoEnclave_Include_Paths)
+CryptoEnclave_Cpp_Flags := $(CryptoEnclave_C_Flags) -std=c++03
+CryptoEnclave_Link_Flags := $(SGX_COMMON_CFLAGS) -L$(SGX_LIBRARY_PATH) \
+	-Wl,--whole-archive -lSGXSanRTEnclave -l$(Trts_Library_Name) -Wl,--no-whole-archive \
+	-Wl,--start-group -l$(Crypto_Library_Name) -l$(Service_Library_Name) -Wl,--end-group \
+	-Wl,-Bsymbolic \
+	-Wl,-eenclave_entry -Wl,--export-dynamic  \
+	-Wl,--defsym,__ImageBase=0
 
 CryptoEnclave_Cpp_Objects := $(CryptoEnclave_Cpp_Files:.cpp=.o)
 
@@ -110,6 +109,60 @@ endif
 endif
 endif
 
+ifeq ($(KAFL_FUZZER), 1)
+App_Link_Flags += \
+	-ldl \
+	-Wl,-rpath=$(SGX_LIBRARY_PATH) \
+	-Wl,-whole-archive -lSGXSanRTApp -Wl,-no-whole-archive \
+	-lSGXFuzzerRT \
+	-lcrypto \
+	-lboost_program_options \
+	-rdynamic \
+	-lnyx_agent
+CryptoEnclave_C_Flags += \
+	-fno-discard-value-names \
+	-flegacy-pass-manager \
+	-Xclang -load -Xclang $(SGX_SDK)/lib64/libSGXSanPass.so
+CryptoEnclave_Cpp_Flags += \
+	-fno-discard-value-names \
+	-flegacy-pass-manager \
+	-Xclang -load -Xclang $(SGX_SDK)/lib64/libSGXSanPass.so
+CryptoEnclave_Link_Flags += -shared
+else
+App_C_Flags += \
+	-fsanitize-coverage=inline-8bit-counters,bb,no-prune,pc-table,trace-cmp \
+	-fprofile-instr-generate \
+	-fcoverage-mapping
+App_Cpp_Flags += \
+	-fsanitize-coverage=inline-8bit-counters,bb,no-prune,pc-table,trace-cmp \
+	-fprofile-instr-generate \
+	-fcoverage-mapping
+App_Link_Flags += \
+	-ldl \
+	-Wl,-rpath=$(SGX_LIBRARY_PATH) \
+	-Wl,-whole-archive -lSGXSanRTApp -Wl,-no-whole-archive \
+	-lSGXFuzzerRT \
+	-lcrypto \
+	-lboost_program_options \
+	-rdynamic \
+	-fuse-ld=${LD} \
+	-fprofile-instr-generate
+CryptoEnclave_C_Flags += \
+	-fno-discard-value-names \
+	-flegacy-pass-manager \
+	-Xclang -load -Xclang $(SGX_SDK)/lib64/libSGXSanPass.so \
+	-fsanitize-coverage=inline-8bit-counters,bb,no-prune,pc-table,trace-cmp \
+	-fprofile-instr-generate \
+	-fcoverage-mapping
+CryptoEnclave_Cpp_Flags += \
+	-fno-discard-value-names \
+	-flegacy-pass-manager \
+	-Xclang -load -Xclang $(SGX_SDK)/lib64/libSGXSanPass.so \
+	-fsanitize-coverage=inline-8bit-counters,bb,no-prune,pc-table,trace-cmp \
+	-fprofile-instr-generate \
+	-fcoverage-mapping
+CryptoEnclave_Link_Flags += -fuse-ld=${LD} -fprofile-instr-generate -shared
+endif
 
 .PHONY: all run
 
@@ -122,7 +175,7 @@ all: $(App_Name) $(CryptoEnclave_Name)
 	@echo "You can also sign the enclave using an external signing tool. See User's Guide for more details."
 	@echo "To build the project in simulation mode set SGX_MODE=SIM. To build the project in prerelease mode set SGX_PRERELEASE=1 and SGX_MODE=HW."
 else
-all: $(App_Name) $(Signed_CryptoEnclave_Name)
+all: $(App_Name) $(CryptoEnclave_Name)
 endif
 
 run: all
@@ -134,14 +187,16 @@ endif
 ######## CryptoFileApp Objects ########
 
 CryptoFileApp/CryptoEnclave_u.c: $(SGX_EDGER8R) CryptoEnclave/CryptoEnclave.edl
-	@cd CryptoFileApp && $(SGX_EDGER8R) --untrusted ../CryptoEnclave/CryptoEnclave.edl --search-path ../CryptoEnclave --search-path $(SGX_SDK)/include
+	@cd CryptoFileApp && $(SGX_EDGER8R) --untrusted ../CryptoEnclave/CryptoEnclave.edl --search-path ../CryptoEnclave --search-path $(SGX_SDK)/include --dump-parse ../Enclave.edl.json
 	@echo "GEN  =>  $@"
 
 CryptoFileApp/CryptoEnclave_u.o: CryptoFileApp/CryptoEnclave_u.c
-	@$(CC) $(App_C_Flags) -c $< -o $@
+	@$(CC) $(App_C_Flags) -c $< -o $@ \
+	-flegacy-pass-manager \
+	-Xclang -load -Xclang $(SGX_SDK)/lib64/libSGXFuzzerPass.so
 	@echo "CC   <=  $<"
 
-CryptoFileApp/%.o: CryptoFileApp/%.cpp
+CryptoFileApp/%.o: CryptoFileApp/%.cpp CryptoFileApp/CryptoEnclave_u.c
 	@$(CXX) $(App_Cpp_Flags) -c $< -o $@
 	@echo "CXX  <=  $<"
 
@@ -168,7 +223,7 @@ CryptoEnclave/CryptoEnclave_t.o: CryptoEnclave/CryptoEnclave_t.c
 	@$(CC) $(CryptoEnclave_C_Flags) -c $< -o $@
 	@echo "CC   <=  $<"
 
-CryptoEnclave/%.o: CryptoEnclave/%.cpp
+CryptoEnclave/%.o: CryptoEnclave/%.cpp CryptoEnclave/CryptoEnclave_t.c
 	@$(CXX) $(CryptoEnclave_Cpp_Flags) -c $< -o $@
 	@echo "CXX  <=  $<"
 
