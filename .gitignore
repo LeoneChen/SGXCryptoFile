@@ -3,3 +3,5 @@
 **/*.o
 sgxCryptoFile
 **/*.so
+CryptoEnclave.signed.so.*
+ghidra

@@ -1,3 +1,4 @@
+#include "kafl_hc.h"
 #include "CryptoEnclave_t.h"
 
 #include "sgx_trts.h"
@@ -9,6 +10,7 @@ static sgx_aes_gcm_128bit_key_t key = { 0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 
 
 void sgxDecryptFile(unsigned char *encMessageIn, size_t len, unsigned char *decMessageOut, size_t lenOut)
 {
+    LogEnter(__func__);
 	uint8_t *encMessage = (uint8_t *) encMessageIn;
 	uint8_t p_dst[lenOut];
         sgx_status_t ret;
@@ -34,6 +36,7 @@ void sgxDecryptFile(unsigned char *encMessageIn, size_t len, unsigned char *decM
 
 void sgxEncryptFile(unsigned char *decMessageIn, size_t len, unsigned char *encMessageOut, size_t lenOut)
 {
+    LogEnter(__func__);
 	uint8_t *origMessage = (uint8_t *) decMessageIn;
 	uint8_t p_dst[lenOut];
         sgx_status_t ret;
